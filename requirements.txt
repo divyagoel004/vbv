@@ -2,8 +2,9 @@ streamlit
 autogen
 pygments
 pydantic
-langfuse==5.2.3
+langfuse
 trafilatura
 aiohttp
 sentence-transformers
+
 langchain-core
