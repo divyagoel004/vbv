@@ -1718,49 +1718,74 @@ def display_generated_presentation():
         
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 def export_to_pdf(topic):
-    """Export the **sub-topic** presentation to PDF – no crashes."""
+    """Export the presentation to PDF - fixed version"""
     try:
         from reportlab.lib.pagesizes import A4
-        from reportlab.platypus import (SimpleDocTemplate, Paragraph,
-                                        Spacer, PageBreak)
-        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.enums import TA_CENTER
+        from io import BytesIO
 
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4)
         styles = getSampleStyleSheet()
         story = []
 
-        # cover
-        cover = ParagraphStyle('cover', parent=styles['Title'], alignment=TA_CENTER)
+        # Create cover page
+        cover_style = ParagraphStyle('cover', parent=styles['Title'], alignment=TA_CENTER)
         story.append(Spacer(1, 200))
-        story.append(Paragraph(topic, cover))
+        story.append(Paragraph(str(topic), cover_style))
         story.append(Spacer(1, 30))
-        if st.session_state.subtopics:
+        
+        # Add subtopics if available
+        if hasattr(st.session_state, 'subtopics') and st.session_state.subtopics:
             story.append(Paragraph("Subtopics:", styles['Heading2']))
-            for st in st.session_state.subtopics:
-                story.append(Paragraph(f"• {st}", styles['Normal']))
+            for subtopic in st.session_state.subtopics:
+                story.append(Paragraph(f"• {str(subtopic)}", styles['Normal']))
+        
         story.append(PageBreak())
 
-        # slides
-        for slide in st.session_state.slides:
-            story.append(Paragraph(slide.title, styles['Heading1']))
-            story.append(Spacer(1, 12))
-            for sec in slide.content_sections:
-                if sec['type'] == 'text':
-                    story.append(Paragraph(sec['content'], styles['Normal']))
-                elif sec['type'] == 'code':
-                    story.append(Paragraph(f"<font name='Courier'>{sec['content']}</font>",
-                                           styles['Normal']))
-                story.append(Spacer(1, 6))
-            story.append(PageBreak())
+        # Add slides content
+        if hasattr(st.session_state, 'slides') and st.session_state.slides:
+            for slide in st.session_state.slides:
+                # Add slide title
+                story.append(Paragraph(str(slide.title), styles['Heading1']))
+                story.append(Spacer(1, 12))
+                
+                # Add slide content sections
+                for section in slide.content_sections:
+                    try:
+                        if section['type'] == 'text':
+                            # Clean the text content for PDF
+                            clean_content = str(section['content']).replace('\n', '<br/>')
+                            story.append(Paragraph(clean_content, styles['Normal']))
+                        elif section['type'] == 'code':
+                            # Format code content
+                            code_content = f"<font name='Courier'>{str(section['content'])}</font>"
+                            story.append(Paragraph(code_content, styles['Normal']))
+                        else:
+                            # Handle other content types as text
+                            content = str(section.get('content', 'Content not available'))
+                            story.append(Paragraph(content, styles['Normal']))
+                        
+                        story.append(Spacer(1, 6))
+                    except Exception as section_error:
+                        # Skip problematic sections
+                        print(f"Skipping section due to error: {section_error}")
+                        continue
+                
+                story.append(PageBreak())
 
+        # Build the PDF
         doc.build(story)
         buffer.seek(0)
         return buffer.getvalue()
 
+    except ImportError as import_error:
+        print(f"Missing required library for PDF generation: {import_error}")
+        return None
     except Exception as e:
-        st.error(f"PDF generation failed: {e}")
+        print(f"PDF generation failed: {e}")
         return None
 
 def main():
@@ -1800,4 +1825,5 @@ def main():
         display_generated_presentation()
 
 if __name__ == "__main__":
+
     main()
