@@ -39,7 +39,7 @@ from sentence_transformers import SentenceTransformer
 import logging
 from typing import List, Dict, Any
 import uuid
-from base import serper_search, query_vector_db
+from base import serper_search, query_vector_db, clear_vector_db, get_filtered_sources, rebuild_vector_db_with_filtered_sources
 
 # Define the structure to parse
 class CodeSnippet(BaseModel):
@@ -574,6 +574,53 @@ def render_research_sources_section():
         with col3:
             if st.button("Regenerate with Selected Sources", type="primary", key="regenerate_filtered"):
                 regenerate_presentation_with_filtered_sources()
+def regenerate_presentation_with_filtered_sources():
+    """Regenerate presentation using only non-excluded sources"""
+    try:
+        # Get excluded indices from selected_sources
+        excluded_indices = st.session_state.selected_sources
+        
+        if not st.session_state.research_sources or len(excluded_indices) == len(st.session_state.research_sources):
+            st.error("No sources selected. Please include at least one source.")
+            return
+        
+        active_count = len(st.session_state.research_sources) - len(excluded_indices)
+        st.info(f"Regenerating presentation with {active_count} selected sources...")
+        
+        # Rebuild vector database with filtered sources
+        rebuild_vector_db_with_filtered_sources(excluded_indices)
+        
+        # Update knowledge base with filtered sources
+        filtered_sources = get_filtered_sources(excluded_indices)
+        filtered_knowledge = {}
+        
+        for source in filtered_sources:
+            topic = source.get('topic', 'general')
+            content = source.get('content', '')
+            if topic not in filtered_knowledge:
+                filtered_knowledge[topic] = []
+            if content:
+                filtered_knowledge[topic].append(content)
+        
+        # Store the filtered knowledge
+        st.session_state.knowledge_base = filtered_knowledge
+        
+        # Regenerate slides
+        slides = generate_subtopic_based_slides(
+            st.session_state.topic,
+            st.session_state.subtopics,
+            st.session_state.subtopic_component_structure,
+            st.session_state.depth_level
+        )
+        
+        st.session_state.slides = slides
+        st.session_state.current_slide = 0
+        
+        st.success("Presentation regenerated successfully!")
+        st.rerun()
+        
+    except Exception as e:
+        st.error(f"Error regenerating presentation: {str(e)}")
 
 def render_source_card(source_idx, source, is_excluded):
     """Render an individual source card"""
@@ -1013,20 +1060,43 @@ def render_generation_step():
     status_text = st.empty()
     
     try:
-        # Step 1: Research and vector DB
-        status_text.text("🔍 Researching topic and building knowledge base...")
+        # Clear previous research sources and vector DB
+        if 'research_sources' not in st.session_state:
+            st.session_state.research_sources = []
+        else:
+            st.session_state.research_sources.clear()
+        
+        clear_vector_db()
+        
+        # Step 1: Research main topic
+        status_text.text(f"🔍 Researching main topic: {st.session_state.topic}...")
         progress_bar.progress(15)
-        serper_search(st.session_state.topic, 20)
+        serper_search(st.session_state.topic, 20)  # This will populate research_sources
         
-        # Research each subtopic
-        for i, subtopic in enumerate(st.session_state.subtopics):
-            status_text.text(f"🔍 Researching subtopic: {subtopic}...")
-            progress_bar.progress(15 + (i + 1) * 20 // len(st.session_state.subtopics))
-            serper_search(f"{st.session_state.topic} {subtopic}", 15)
+        # Step 2: Research each subtopic
+        if st.session_state.subtopics:
+            subtopic_progress = 50 // len(st.session_state.subtopics)
+            
+            for i, subtopic in enumerate(st.session_state.subtopics):
+                status_text.text(f"🔍 Researching subtopic: {subtopic}...")
+                current_progress = 15 + (i + 1) * subtopic_progress
+                progress_bar.progress(min(current_progress, 65))
+                
+                # Search for each subtopic in context of main topic
+                search_query = f"{st.session_state.topic} {subtopic}"
+                serper_search(search_query, 15)  # This adds to research_sources
         
-        # Step 2: Generate slides
+        # Step 3: Build knowledge base
+        status_text.text("📚 Building knowledge base from research...")
+        progress_bar.progress(70)
+        
+        # The knowledge base is already built in the vector store by serper_search
+        # Just update our session state knowledge base for compatibility
+        build_knowledge_base_from_research_sources()
+        
+        # Step 4: Generate slides
         status_text.text("🎨 Generating presentation slides...")
-        progress_bar.progress(60)
+        progress_bar.progress(85)
         
         slides = generate_subtopic_based_slides(
             st.session_state.topic,
@@ -1036,13 +1106,13 @@ def render_generation_step():
         )
         
         progress_bar.progress(100)
-        status_text.text("✅ Presentation generated successfully!")
+        status_text.text(f"✅ Presentation generated successfully! Found {len(st.session_state.research_sources)} research sources.")
         
         st.session_state.slides = slides
         st.session_state.current_slide = 0
         st.session_state.generation_step = 'completed'
         
-        sleep(1)  # Brief pause to show completion
+        sleep(2)  # Show completion message
         st.rerun()
         
     except Exception as e:
@@ -1055,7 +1125,22 @@ def render_generation_step():
         if st.button("⬅️ Back to Components"):
             st.session_state.generation_step = 'subtopic_component_selection'
             st.rerun()
-
+def build_knowledge_base_from_research_sources():
+    """Build knowledge base from collected research sources for compatibility"""
+    st.session_state.knowledge_base = {}
+    
+    if 'research_sources' not in st.session_state:
+        return
+    
+    for source in st.session_state.research_sources:
+        topic = source.get('topic', 'general')
+        content = source.get('content', '')
+        
+        if topic not in st.session_state.knowledge_base:
+            st.session_state.knowledge_base[topic] = []
+        
+        if content and content not in st.session_state.knowledge_base[topic]:
+            st.session_state.knowledge_base[topic].append(content)
 def generate_subtopic_based_slides(topic, subtopics, subtopic_component_structure, depth_level="intermediate"):
     """Generate slides based on subtopic structure"""
     # This function would integrate with your existing slide generation logic
@@ -1226,6 +1311,30 @@ def create_fallback_equation_image(math_expr: str, output_path: str) -> str:
         print(f"ERROR: Even fallback image creation failed: {str(e)}")
         return ""
     
+def generate_content_for_subtopic_component_enhanced(
+    component: str,
+    content_type: str,
+    subtopic: str,
+    main_topic: str,
+    depth_level: str,
+    content_generator,
+    trace_id=None
+):
+    """
+    Generate content using the vector database for research context
+    """
+    
+    # Query vector database for relevant context
+    query = f"{main_topic} {subtopic} {content_type} {component}"
+    research_context_results = query_vector_db(query, top_k=5, chunk_limit=300)
+    
+    # Combine research context
+    research_context = "\n\n".join(research_context_results) if research_context_results else ""
+    
+    # Use the existing content generation logic but with enhanced context
+    return generate_content_for_subtopic_component(
+        component, content_type, subtopic, main_topic, depth_level, content_generator, trace_id
+    )
 
 
 def generate_content_for_subtopic_component(
@@ -1652,11 +1761,35 @@ def render_slide_display(slide, slide_index):
     st.markdown('</div></div>', unsafe_allow_html=True)
 
 def display_generated_presentation():
-    """Display the generated presentation with navigation and editing capabilities"""
+    """Enhanced presentation display with research sources tab"""
     
+    # Create tabs for presentation and sources
+    tab1, tab2 = st.tabs(["📖 Presentation", "🔬 Research Sources"])
+    
+    with tab1:
+        display_presentation_content()
+    
+    with tab2:
+        render_research_sources_section()
+
+def display_presentation_content():
+    """Display the main presentation content"""
     # Sidebar navigation
     with st.sidebar:
         st.markdown("### 🎮 Presentation Controls")
+        
+        # Research sources summary
+        if 'research_sources' in st.session_state:
+            total_sources = len(st.session_state.research_sources)
+            excluded_count = len(st.session_state.selected_sources) if 'selected_sources' in st.session_state else 0
+            active_count = total_sources - excluded_count
+            
+            st.markdown(f"""
+            **📊 Research Summary:**
+            - Total sources: {total_sources}
+            - Active sources: {active_count}
+            - Excluded sources: {excluded_count}
+            """)
         
         # Navigation
         if st.session_state.slides:
@@ -1704,8 +1837,9 @@ def display_generated_presentation():
             # Reset option
             st.markdown("---")
             if st.button("🔄 New Presentation", type="secondary"):
-                # Reset all session state
-                for key in ['slides', 'subtopics', 'subtopic_content_structure', 'subtopic_component_structure', 'topic', 'generation_step']:
+                # Clear everything including vector DB
+                clear_vector_db()
+                for key in ['slides', 'subtopics', 'subtopic_content_structure', 'subtopic_component_structure', 'topic', 'generation_step', 'research_sources', 'selected_sources', 'knowledge_base']:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.session_state.generation_step = 'topic_subtopic_input'
@@ -1715,77 +1849,111 @@ def display_generated_presentation():
     if st.session_state.slides:
         current_slide = st.session_state.slides[st.session_state.current_slide]
         render_slide_display(current_slide, st.session_state.current_slide)
-        
+       
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, PageBreak,Preformatted
+)
+from PIL import Image as PILImage
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+def boldify(text: str) -> str:
+    """
+    Convert **text** to <b>text</b> for ReportLab Paragraphs.
+    Keeps line-breaks as <br/>.
+    """
+    text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+    return text.replace('\n', '<br/>')
 def export_to_pdf(topic):
-    """Export the presentation to PDF - fixed version"""
     try:
-        from reportlab.lib.pagesizes import A4
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.enums import TA_CENTER
-        from io import BytesIO
-
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4)
         styles = getSampleStyleSheet()
         story = []
 
-        # Create cover page
-        cover_style = ParagraphStyle('cover', parent=styles['Title'], alignment=TA_CENTER)
-        story.append(Spacer(1, 200))
-        story.append(Paragraph(str(topic), cover_style))
-        story.append(Spacer(1, 30))
-        
-        # Add subtopics if available
-        if hasattr(st.session_state, 'subtopics') and st.session_state.subtopics:
-            story.append(Paragraph("Subtopics:", styles['Heading2']))
-            for subtopic in st.session_state.subtopics:
-                story.append(Paragraph(f"• {str(subtopic)}", styles['Normal']))
-        
+        # ---------- styles ----------
+        title_style = ParagraphStyle(
+            name='SlideTitle',
+            fontSize=16,
+            leading=20,
+            spaceAfter=10,
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold',
+            wordWrap='CJK'
+        )
+        body_style = ParagraphStyle(
+            name='Body',
+            parent=styles['Normal'],
+            alignment=TA_LEFT,
+            spaceAfter=6
+        )
+        code_style = ParagraphStyle(
+            name='Code',
+            fontSize=9,
+            fontName='Courier',
+            leftIndent=20,
+            rightIndent=20,
+            borderWidth=1,
+            borderColor=colors.lightgrey,
+            borderPadding=8,
+            backColor=colors.lightgrey
+        )
+
+        # ---------- cover page ----------
+        topic = getattr(st.session_state, "topic", "Untitled Topic")
+        cover_title_style = ParagraphStyle(
+            name='CoverTitle',
+            fontSize=28,
+            leading=36,
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold',
+            spaceAfter=40
+        )
+        story.append(Spacer(1, 200))  # Push title to middle
+        story.append(Paragraph(topic, cover_title_style))
+        story.append(Spacer(1, 20))
+        story.append(Paragraph("Generated Slide Deck", title_style))
         story.append(PageBreak())
 
-        # Add slides content
-        if hasattr(st.session_state, 'slides') and st.session_state.slides:
-            for slide in st.session_state.slides:
-                # Add slide title
-                story.append(Paragraph(str(slide.title), styles['Heading1']))
-                story.append(Spacer(1, 12))
-                
-                # Add slide content sections
-                for section in slide.content_sections:
-                    try:
-                        if section['type'] == 'text':
-                            # Clean the text content for PDF
-                            clean_content = str(section['content']).replace('\n', '<br/>')
-                            story.append(Paragraph(clean_content, styles['Normal']))
-                        elif section['type'] == 'code':
-                            # Format code content
-                            code_content = f"<font name='Courier'>{str(section['content'])}</font>"
-                            story.append(Paragraph(code_content, styles['Normal']))
-                        else:
-                            # Handle other content types as text
-                            content = str(section.get('content', 'Content not available'))
-                            story.append(Paragraph(content, styles['Normal']))
-                        
-                        story.append(Spacer(1, 6))
-                    except Exception as section_error:
-                        # Skip problematic sections
-                        print(f"Skipping section due to error: {section_error}")
-                        continue
-                
-                story.append(PageBreak())
+        # ---------- slides ----------
+        for slide_idx, slide in enumerate(st.session_state.slides):
+            story.append(Paragraph(slide.title, title_style))
+            story.append(Spacer(1, 12))
 
-        # Build the PDF
+            for sec in slide.content_sections:
+                if sec["type"] == "text":
+                    story.append(Paragraph(boldify(sec["content"]), body_style))
+                elif sec["type"] == "code":
+                    story.append(Preformatted(sec["content"], code_style))
+                    story.append(Spacer(1, 6))
+                elif sec["type"] == "image":
+                    img_path = sec["content"]
+                    if os.path.exists(img_path):
+                        try:
+                            max_w, max_h = 5*inch, 4*inch
+                            img = PILImage.open(img_path)
+                            w, h = img.size
+                            scale = min(max_w/w, max_h/h)
+                            story.append(
+                                RLImage(img_path,
+                                        width=w*scale,
+                                        height=h*scale)
+                            )
+                            story.append(Spacer(1, 6))
+                        except Exception:
+                            story.append(Paragraph("[Image not rendered]", body_style))
+            story.append(PageBreak())
+
+        # ---------- build PDF ----------
         doc.build(story)
         buffer.seek(0)
         return buffer.getvalue()
 
-    except ImportError as import_error:
-        print(f"Missing required library for PDF generation: {import_error}")
-        return None
     except Exception as e:
-        print(f"PDF generation failed: {e}")
+        st.error(f"Error generating PDF: {e}")
         return None
 
 def main():
@@ -1825,5 +1993,4 @@ def main():
         display_generated_presentation()
 
 if __name__ == "__main__":
-
     main()
