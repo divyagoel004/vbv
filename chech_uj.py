@@ -227,6 +227,7 @@ header {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
+
 research_sources_css = """
 <style>
 .research-sources-container {
@@ -245,6 +246,7 @@ research_sources_css = """
     margin: 10px 0;
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     transition: all 0.3s ease;
+    color: #333; /* Ensure dark text color */
 }
 
 .source-card:hover {
@@ -256,18 +258,19 @@ research_sources_css = """
     opacity: 0.5;
     border-color: #ff6b6b;
     background: #fff5f5;
+    color: #666; /* Darker text for excluded items */
 }
 
 .source-title {
     font-size: 16px;
     font-weight: 600;
-    color: #333;
+    color: #333 !important; /* Force dark text */
     margin-bottom: 8px;
 }
 
 .source-url {
     font-size: 12px;
-    color: #666;
+    color: #666 !important; /* Force visible text */
     margin-bottom: 10px;
     word-break: break-all;
 }
@@ -275,7 +278,7 @@ research_sources_css = """
 .source-type-badge {
     display: inline-block;
     background: #667eea;
-    color: white;
+    color: white !important; /* White text on colored background */
     padding: 2px 8px;
     border-radius: 10px;
     font-size: 10px;
@@ -290,11 +293,29 @@ research_sources_css = """
     font-size: 14px;
     max-height: 150px;
     overflow-y: auto;
+    color: #333 !important; /* Force dark text */
 }
 
 .source-actions {
     text-align: right;
     margin-top: 10px;
+}
+
+/* Global text color fix for Streamlit elements */
+.stMarkdown, .stText {
+    color: #333 !important;
+}
+
+/* Fix for any other potential text visibility issues */
+* {
+    color: inherit;
+}
+
+/* Specifically target white backgrounds to ensure dark text */
+[style*="background: white"], 
+[style*="background-color: white"],
+.white-bg {
+    color: #333 !important;
 }
 </style>"""
 
@@ -427,28 +448,43 @@ def render_topic_subtopic_input_step():
 
 
 agent = AssistantAgent(
-            name="PPTTextGenerator",
-            system_message="""
-        You are a PowerPoint Text Generator Assistant specialized in creating concise, 
-        informative presentation content. Your role is to:
-        
-        1. Generate compelling titles and subtopics
-        2. Create bullet points with maximum impact, minimum words
-        3. Provide different content variations for the same topic
-        4. Focus on key statistics, trends, and actionable insights
-        5. Structure content for visual presentation (slides)
-        
-        Guidelines:
-        - Keep bullet points to 6-8 words maximum
-        - Use action verbs and power words
-        - Include relevant statistics and data points
-        - Vary content structure for different requests
-        - Prioritize clarity over completeness
-        """,
-             llm_config=llm_config,
+    name="PPTTextGenerator",
+    system_message="""
+You are an elite PowerPoint Content Creator specializing in presentation-ready, visually appealing content. Your expertise includes:
+
+**Core Responsibilities:**
+• Generate compelling, emoji-enhanced slide content
+• Create concise definitions (1-2 lines maximum)
+• Develop 4-6 impactful key points per slide
+• Ensure professional, presentation-ready formatting
+
+**Content Standards:**
+• Each key point: 8-12 words maximum
+• Use power words and action verbs
+• Include relevant metrics when possible
+• Maintain consistent, professional tone
+• Avoid repetitive phrasing across points
+
+**Formatting Requirements:**
+• Start with topic emoji and bold title
+• Provide italicized definition (1-2 lines)
+• List key points with appropriate emojis
+• Ensure visual hierarchy and readability
+• Match content style to requested type
+
+**Quality Guidelines:**
+• Prioritize clarity and impact over length
+• Use data-driven insights when available
+• Maintain professional presentation standards
+• Ensure content is immediately usable
+• Focus on actionable, valuable information
+
+Always deliver content that looks professional in presentation software like PowerPoint, Gamma, or Manus.
+""",
+    llm_config=llm_config,
     code_execution_config=False,
     human_input_mode="NEVER",
-        )
+)
 
 content_generator = AssistantAgent(
     name="Content-generator",
@@ -2111,7 +2147,100 @@ def get_top_image_contexts(topic, content_type, component, top_k=10):
 #         "component_name": component
     # }
 # Slide class for better organization (same as original)
+def format_presentation_content(raw_content, content_type, topic):
+    """
+    Format content for professional presentation with emojis and better structure
+    """
+    # Add topic-specific emojis
+    emoji_map = {
+        "technology": "💻",
+        "business": "📈",
+        "marketing": "🎯",
+        "finance": "💰",
+        "healthcare": "🏥",
+        "education": "📚",
+        "environment": "🌱",
+        "innovation": "💡",
+        "data": "📊",
+        "ai": "🤖",
+        "default": "✨"
+    }
+    
+    # Get appropriate emoji based on topic keywords
+    topic_emoji = get_topic_emoji(topic.lower(), emoji_map)
+    
+    # Split content into definition and key points
+    lines = raw_content.strip().split('\n')
+    definition = ""
+    key_points = []
+    
+    # Parse the content
+    for line in lines:
+        line = line.strip()
+        if line and not line.startswith('•') and not line.startswith('-') and not line.startswith('*'):
+            if not definition:
+                definition = line
+        elif line.startswith(('•', '-', '*')):
+            clean_point = line.lstrip('•-* ').strip()
+            if clean_point:
+                key_points.append(clean_point)
+    
+    # Format the final output
+    formatted_output = f"{topic_emoji} **{topic}**\n\n"
+    
+    if definition:
+        formatted_output += f"_{definition}_\n\n"
+    
+    if key_points:
+        formatted_output += "**Key Points:**\n"
+        for i, point in enumerate(key_points[:6], 1):  # Limit to 6 points max
+            point_emoji = get_point_emoji(i, content_type)
+            formatted_output += f"{point_emoji} {point}\n"
+    
+    return formatted_output
 
+def get_topic_emoji(topic, emoji_map):
+    """Get appropriate emoji based on topic keywords"""
+    for keyword, emoji in emoji_map.items():
+        if keyword in topic:
+            return emoji
+    return emoji_map["default"]
+
+def get_point_emoji(index, content_type):
+    """Get rotating emojis for key points based on content type"""
+    content_emojis = {
+        "applications": ["🔧", "⚡", "🎯", "🚀", "💼", "🔥"],
+        "benefits": ["✅", "💪", "📈", "🎉", "⭐", "🏆"],
+        "features": ["🔹", "⚙️", "🎛️", "🔍", "📱", "🖥️"],
+        "challenges": ["⚠️", "🚧", "⛔", "📉", "🔴", "❗"],
+        "solutions": ["💡", "🔑", "🛠️", "✨", "🎯", "🔧"],
+        "trends": ["📊", "📈", "🔥", "🚀", "⏰", "📅"],
+        "statistics": ["📊", "📈", "🔢", "📉", "💹", "📋"],
+        "default": ["▶️", "🔸", "💫", "⚡", "🎯", "✨"]
+    }
+    
+    # Get emoji set based on content type
+    for key, emojis in content_emojis.items():
+        if key in content_type.lower():
+            return emojis[(index - 1) % len(emojis)]
+    
+    return content_emojis["default"][(index - 1) % len(content_emojis["default"])]
+
+def generate_fallback_content(component, subtopic, content_type):
+    """Generate professional fallback content with emojis"""
+    topic_emoji = "✨"
+    
+    return f"""{topic_emoji} **{subtopic}**
+
+_Professional content for {content_type.lower()} presentation_
+
+**Key Points:**
+🔹 Comprehensive overview and analysis
+⚡ Strategic implementation approach  
+📈 Measurable outcomes and benefits
+🎯 Industry best practices integration
+💡 Innovation-driven solutions
+🚀 Future-ready methodology"""
 def generate_content_for_subtopic_component(
     component: str,
     content_type: str,
@@ -2182,31 +2311,36 @@ def generate_content_for_subtopic_component(
     # TEXT component
     if component.lower() == "text":
         try:
-            prompt_obj = langfuse_client.get_prompt(
-                name="text_general_generation_prompt",
-                label="production"
-            )
-            prompt = prompt_obj.compile(
-                research_context=research_context,
-                content_type=content_type,
-                topic=subtopic
-            )
+                prompt_obj = langfuse_client.get_prompt(
+                    name="text_general_generation_prompt",
+                    label="production"
+                )
+                prompt = prompt_obj.compile(
+                    research_context=research_context,
+                    content_type=content_type,
+                    topic=subtopic
+                )
 
-            response = agent.generate_reply([
-                {"role": "user", "content": prompt}
-            ])
+                response = agent.generate_reply([
+                    {"role": "user", "content": prompt}
+                ])
 
-            return {
-                "type": "text",
-                "content": response.strip(),
-                "editable": True,
-                "component_name": component
-            }
+                # Post-process the response for better presentation
+                formatted_content = format_presentation_content(response.strip(), content_type, subtopic)
+
+                return {
+                    "type": "text",
+                    "content": formatted_content,
+                    "editable": True,
+                    "component_name": component
+                }
 
         except Exception as e:
+        # Enhanced fallback content with emojis and better structure
+            fallback_content = generate_fallback_content(component, subtopic, content_type)
             return {
                 "type": "text",
-                "content": f"Content for {component} in {subtopic} - {content_type}",
+                "content": fallback_content,
                 "editable": True,
                 "component_name": component
             }
@@ -2284,13 +2418,13 @@ def generate_content_for_subtopic_component(
             }
 
         except Exception as e:
-            raise("Code")
-            # return {
-            #     "type": "code",
-            #     "content": f"# Code example for {subtopic}\nprint('{main_topic} - {subtopic}')",
-            #     "editable": True,
-            #     "component_name": component
-            # }
+            
+            return {
+                "type": "code",
+                "content": f"",
+                "editable": True,
+                "component_name": ""
+            }
 
     # MATHEMATICAL EQUATIONS component
     elif component.lower() == "mathematical equations":
@@ -2333,9 +2467,9 @@ def generate_content_for_subtopic_component(
                 
             return sections if sections else {
                 "type": "text",
-                "content": f"Mathematical equations related to {subtopic}",
+                "content": f"",
                 "editable": True,
-                "component_name": component
+                "component_name": ""
             }
 
         except Exception as e:
@@ -2474,9 +2608,9 @@ def generate_content_for_subtopic_component(
             # Return sections if we have any, otherwise fallback
             return sections if sections else {
                 "type": "text",
-                "content": f"{component} for {subtopic}",
+                "content": f"",
                 "editable": True,
-                "component_name": component
+                "component_name": ""
             }
                 
         except Exception as e:
@@ -2581,9 +2715,9 @@ def generate_content_for_subtopic_component(
             
             return sections if sections else {
                 "type": "text",
-                "content": f"Real-world photo placeholder for {subtopic}",
+                "content": f"",
                 "editable": True,
-                "component_name": component
+                "component_name": ""
             }
                 
         except Exception as e:
@@ -2658,9 +2792,9 @@ def generate_content_for_subtopic_component(
     # Fallback for anything else
     return {
         "type": "text",
-        "content": f"**{component}**\n\nContent for {component} in {subtopic} - {content_type}",
+        "content": f"",
         "editable": True,
-        "component_name": component
+        "component_name":""
     }
 class Slide:
     def __init__(self, title, content_sections, slide_number):
