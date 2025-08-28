@@ -2483,9 +2483,13 @@ def generate_content_for_subtopic_component(
                     topic=subtopic
                 )
 
-                response = agent.generate_reply([
-                    {"role": "user", "content": prompt}
-                ])
+                response = agent.generate_reply(
+                [{"role": "user", "content": prompt}],
+                # Add these parameters if supported by your agent
+                temperature=0.8,  # Increase randomness
+                top_p=0.9,       # Nucleus sampling
+                max_tokens=2000   # Ensure sufficient length
+            )
 
                 # Post-process the response for better presentation
                 formatted_content = response.strip()
@@ -3268,3 +3272,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
