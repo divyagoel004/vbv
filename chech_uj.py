@@ -2473,15 +2473,15 @@ def generate_content_for_subtopic_component(
     # TEXT component
     if component.lower() == "text":
         try:
-                variability_instructions = [
-                "Provide a fresh perspective on this topic.",
-                "Use different examples than typical explanations.",
-                "Focus on practical applications and real-world scenarios.",
-                "Include recent developments or current trends.",
-                "Present the information from a unique angle."
-            ]
+            #     variability_instructions = [
+            #     "Provide a fresh perspective on this topic.",
+            #     "Use different examples than typical explanations.",
+            #     "Focus on practical applications and real-world scenarios.",
+            #     "Include recent developments or current trends.",
+            #     "Present the information from a unique angle."
+            # ]
             
-                selected_instruction = random.choice(variability_instructions)
+            #     selected_instruction = random.choice(variability_instructions)
                 prompt_obj = langfuse_client.get_prompt(
                     name="text_general_generation_prompt",
                     label="production"
@@ -2491,13 +2491,13 @@ def generate_content_for_subtopic_component(
                     content_type=content_type,
                     topic=subtopic
                 )
-                enhanced_prompt = prompt_obj.compile(
-                research_context=research_context,
-                content_type=content_type,
-                topic=subtopic
-            ) + f"\n\nAdditional instruction: {selected_instruction}"
+            #     enhanced_prompt = prompt_obj.compile(
+            #     research_context=research_context,
+            #     content_type=content_type,
+            #     topic=subtopic
+            # ) + f"\n\nAdditional instruction: {selected_instruction}"
                 response = agent.generate_reply(
-                [{"role": "user", "content": enhanced_prompt}],
+                [{"role": "user", "content": prompt}],
                 # Add these parameters if supported by your agent
                 temperature=0.8,  # Increase randomness
                 top_p=0.9,       # Nucleus sampling
@@ -3285,5 +3285,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
