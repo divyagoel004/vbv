@@ -450,36 +450,43 @@ def render_topic_subtopic_input_step():
 agent = AssistantAgent(
     name="PPTTextGenerator",
     system_message="""
-You are an elite PowerPoint Content Creator specializing in presentation-ready, visually appealing content. Your expertise includes:
+You are an elite PowerPoint Content Creator specializing in professional, presentation-ready slide content. 
 
-**Core Responsibilities:**
-• Generate compelling, emoji-enhanced slide content
-• Create concise definitions (1-2 lines maximum)
-• Develop 4-6 impactful key points per slide
-• Ensure professional, presentation-ready formatting
+**Your Mission:**
+Create visually stunning, concise slide content that rivals Gamma AI and Manus AI quality.
 
-**Content Standards:**
-• Each key point: 8-12 words maximum
-• Use power words and action verbs
-• Include relevant metrics when possible
-• Maintain consistent, professional tone
-• Avoid repetitive phrasing across points
+**Content Structure:**
+1. **Professional Definition**: 1-2 lines that clearly explain the topic
+2. **Impactful Key Points**: 4-6 powerful bullet points (10-15 words each)
 
-**Formatting Requirements:**
-• Start with topic emoji and bold title
-• Provide italicized definition (1-2 lines)
-• List key points with appropriate emojis
-• Ensure visual hierarchy and readability
-• Match content style to requested type
+**Quality Standards:**
+• Each key point must be actionable and specific
+• Use dynamic, engaging language with strong verbs
+• Include technical specifics when relevant  
+• Ensure each point offers unique value
+• Avoid generic or repetitive statements
+• Focus on capabilities, benefits, and applications
 
-**Quality Guidelines:**
-• Prioritize clarity and impact over length
-• Use data-driven insights when available
-• Maintain professional presentation standards
-• Ensure content is immediately usable
-• Focus on actionable, valuable information
+**Formatting Excellence:**
+• Write for immediate presentation use
+• Ensure professional tone throughout
+• Make content scannable and memorable
+• Prioritize clarity and visual impact
+• Use precise, technical terminology when appropriate
 
-Always deliver content that looks professional in presentation software like PowerPoint, Gamma, or Manus.
+**Examples of Strong Key Points:**
+❌ Weak: "FTK analyzes data"  
+✅ Strong: "Process disk images with advanced file recovery capabilities"
+
+❌ Weak: "Autopsy is useful"
+✅ Strong: "Extract and analyze metadata from digital artifacts systematically"
+
+**Topic-Specific Guidelines:**
+• Forensics: Focus on investigation capabilities, evidence processing, technical analysis
+• Technology: Emphasize features, performance, integration capabilities  
+• Business: Highlight ROI, efficiency gains, competitive advantages
+
+Always deliver content ready for high-end presentation platforms.
 """,
     llm_config=llm_config,
     code_execution_config=False,
@@ -972,12 +979,19 @@ def generate_content_structure_for_subtopics():
             )
             
             suggested_types = [ct.strip() for ct in response.text.split(",")]
-            valid_types = [ct for ct in suggested_types if ct in content_types_dict]
-            
-            if valid_types:
-                st.session_state.subtopic_content_structure[subtopic] = valid_types[:5]
+            # valid_types = [ct for ct in suggested_types if ct in content_types_dict]
+            if response and hasattr(response, 'text') and response.text:
+                suggested_types = [ct.strip() for ct in response.text.split(",")]
+                valid_types = [ct for ct in suggested_types if ct in content_types_dict]
+                
+                if valid_types:
+                    st.session_state.subtopic_content_structure[subtopic] = valid_types[:5]
+                else:
+                    # Fallback to default selection
+                    st.session_state.subtopic_content_structure[subtopic] = list(content_types_dict.keys())[:3]
             else:
-                # Fallback to default selection
+                # Handle empty response
+                print(f"Warning: Empty response for subtopic: {subtopic}")
                 st.session_state.subtopic_content_structure[subtopic] = list(content_types_dict.keys())[:3]
                 
         except Exception as e:
@@ -1217,7 +1231,7 @@ def generate_subtopic_based_slides(topic, subtopics, subtopic_component_structur
         "component_name": "title"
     }]
     
-    title_slide = Slide(f"{topic} - Overview", title_slide_content, slide_number)
+    title_slide = Slide(f"{topic}", title_slide_content, slide_number)
     slides.append(title_slide)
     slide_number += 1
     
@@ -2151,9 +2165,16 @@ def format_presentation_content(raw_content, content_type, topic):
     """
     Format content for professional presentation with emojis and better structure
     """
-    # Add topic-specific emojis
+    # Enhanced topic-specific emojis
     emoji_map = {
-        "technology": "💻",
+        "forensic": "🔍",
+        "security": "🛡️", 
+        "cyber": "🔐",
+        "digital": "💻",
+        "investigation": "🕵️",
+        "analysis": "📊",
+        "tools": "🛠️",
+        "technology": "⚙️",
         "business": "📈",
         "marketing": "🎯",
         "finance": "💰",
@@ -2169,36 +2190,177 @@ def format_presentation_content(raw_content, content_type, topic):
     # Get appropriate emoji based on topic keywords
     topic_emoji = get_topic_emoji(topic.lower(), emoji_map)
     
-    # Split content into definition and key points
-    lines = raw_content.strip().split('\n')
+    # Enhanced parsing to handle poorly formatted content
+    content = raw_content.strip()
+    
+    # Remove redundant topic repetition
+    if topic.lower() in content.lower():
+        content = remove_redundant_title(content, topic)
+    
+    # Split and parse content more intelligently
+    lines = [line.strip() for line in content.split('\n') if line.strip()]
     definition = ""
     key_points = []
     
-    # Parse the content
+    # Extract definition and key points
+    current_section = "definition"
     for line in lines:
-        line = line.strip()
-        if line and not line.startswith('•') and not line.startswith('-') and not line.startswith('*'):
-            if not definition:
+        if "key points:" in line.lower():
+            current_section = "points"
+            continue
+        elif line.startswith(('•', '-', '*', '▶️', '🔹')):
+            clean_point = clean_bullet_point(line)
+            if clean_point and len(clean_point) > 10:  # Ensure meaningful content
+                key_points.append(enhance_key_point(clean_point))
+        elif current_section == "definition" and not line.startswith(('•', '-', '*')):
+            if not definition and len(line) > 15:  # Avoid short fragments
                 definition = line
-        elif line.startswith(('•', '-', '*')):
-            clean_point = line.lstrip('•-* ').strip()
-            if clean_point:
-                key_points.append(clean_point)
     
-    # Format the final output
-    formatted_output = f"{topic_emoji} **{topic}**\n\n"
+    # Generate professional definition if missing
+    if not definition:
+        definition = generate_smart_definition(topic, content_type)
     
-    if definition:
-        formatted_output += f"_{definition}_\n\n"
+    # Ensure we have quality key points
+    if len(key_points) < 4:
+        key_points = generate_enhanced_key_points(topic, content_type, key_points)
     
-    if key_points:
-        formatted_output += "**Key Points:**\n"
-        for i, point in enumerate(key_points[:6], 1):  # Limit to 6 points max
-            point_emoji = get_point_emoji(i, content_type)
-            formatted_output += f"{point_emoji} {point}\n"
-    
-    return formatted_output
+    # Format the final output with enhanced structure
+    formatted_output = f"🎯 **{topic}**\n\n"
+    formatted_output += f"_{definition}_\n\n"
 
+    
+    for i, point in enumerate(key_points[:6], 1):
+        point_emoji = get_enhanced_point_emoji(i, content_type, topic)
+        formatted_output += f"{point_emoji} **{point}**\n\n"
+    
+    return formatted_output.strip()
+def clean_bullet_point(line):
+    """Clean and enhance bullet points"""
+    # Remove various bullet symbols and clean
+    cleaned = line.lstrip('•-*▶️🔹🔸 ').strip()
+    
+    # Capitalize first letter if needed
+    if cleaned and cleaned[0].islower():
+        cleaned = cleaned[0].upper() + cleaned[1:]
+    
+    return cleaned
+def enhance_key_point(point):
+    """Enhance key points for better presentation"""
+    # Ensure proper capitalization and punctuation
+    if not point.endswith('.') and len(point) > 20:
+        point += ''  # Don't add period for short points
+    
+    # Make it more action-oriented if possible
+    action_words = ['analyze', 'examine', 'detect', 'identify', 'support', 'enable']
+    for word in action_words:
+        if word in point.lower() and not point.startswith(word.capitalize()):
+            # Already has action word, keep as is
+            break
+    
+    return point
+def generate_smart_definition(topic, content_type):
+    """Generate intelligent definition based on topic"""
+    forensic_definitions = {
+       "":""
+    }
+    
+    topic_lower = topic.lower()
+    for key, definition in forensic_definitions.items():
+        if key in topic_lower:
+            return definition
+    
+    return f"Comprehensive overview of {topic.lower()} and their applications in digital investigation and analysis"
+
+def generate_enhanced_key_points(topic, content_type, existing_points):
+    """Generate enhanced key points when original content is insufficient"""
+    enhanced_points = []
+    
+    if "forensic" in topic.lower():
+        forensic_points = [
+            "Process disk images with advanced file recovery capabilities",
+            "Extract and analyze metadata from digital artifacts systematically", 
+            "Examine volatile memory for hidden processes and malware",
+            "Generate comprehensive forensic reports with chain of custody",
+            "Support multiple file systems including NTFS, FAT, and HFS+",
+            "Integrate with cloud platforms for modern digital investigations"
+        ]
+        enhanced_points = forensic_points
+    
+    # Combine existing with enhanced, removing duplicates
+    all_points = existing_points + enhanced_points
+    unique_points = []
+    seen = set()
+    
+    for point in all_points:
+        if point.lower()[:20] not in seen:  # Check first 20 chars to avoid near-duplicates
+            unique_points.append(point)
+            seen.add(point.lower()[:20])
+    
+    return unique_points[:6]
+
+def get_topic_emoji(topic, emoji_map):
+    """Get appropriate emoji based on topic keywords"""
+    for keyword, emoji in emoji_map.items():
+        if keyword in topic:
+            return emoji
+    return emoji_map["default"]
+
+def get_enhanced_point_emoji(index, content_type, topic):
+    """Get contextually relevant emojis for key points"""
+    
+    # Forensic/Security specific emojis
+    forensic_emojis = ["🔍", "🛡️", "💾", "🔐", "📱", "⚡"]
+    
+    # Content type specific emojis  
+    content_emojis = {
+        "overview": ["🎯", "📋", "🔍", "⚙️", "💻", "🛠️"],
+        "applications": ["🔧", "⚡", "🎯", "🚀", "💼", "🔥"], 
+        "benefits": ["✅", "💪", "📈", "🎉", "⭐", "🏆"],
+        "features": ["🔹", "⚙️", "🎛️", "🔍", "📱", "🖥️"],
+        "challenges": ["⚠️", "🚧", "⛔", "📉", "🔴", "❗"],
+        "solutions": ["💡", "🔑", "🛠️", "✨", "🎯", "🔧"],
+        "trends": ["📊", "📈", "🔥", "🚀", "⏰", "📅"],
+        "tools": ["🛠️", "🔧", "⚙️", "💻", "🔍", "📊"],
+        "default": ["🚀", "💎", "⚡", "🎯", "✨", "🔥"]
+    }
+    
+    # Use forensic emojis if topic is forensic-related
+    if any(word in topic.lower() for word in ["forensic", "security", "investigation", "cyber"]):
+        return forensic_emojis[(index - 1) % len(forensic_emojis)]
+    
+    # Get emoji set based on content type
+    for key, emojis in content_emojis.items():
+        if key in content_type.lower():
+            return emojis[(index - 1) % len(emojis)]
+    
+    return content_emojis["default"][(index - 1) % len(content_emojis["default"])]
+
+def generate_fallback_content(component, subtopic, content_type):
+    """Generate professional fallback content with emojis"""
+    topic_emoji = "✨"
+    
+    return f"""{topic_emoji} **{subtopic}**
+
+
+
+**Key Points:**
+🔹 Comprehensive overview and analysis
+⚡ Strategic implementation approach  
+📈 Measurable outcomes and benefits
+🎯 Industry best practices integration
+💡 Innovation-driven solutions
+🚀 Future-ready methodology"""
+def remove_redundant_title(content, topic):
+    """Remove redundant topic repetitions from content"""
+    lines = content.split('\n')
+    cleaned_lines = []
+    topic_lower = topic.lower()
+    
+    for line in lines:
+        if line.strip() and not (topic_lower in line.lower() and len(line.strip()) < len(topic) + 20):
+            cleaned_lines.append(line)
+    
+    return '\n'.join(cleaned_lines)
 def get_topic_emoji(topic, emoji_map):
     """Get appropriate emoji based on topic keywords"""
     for keyword, emoji in emoji_map.items():
@@ -2326,7 +2488,7 @@ def generate_content_for_subtopic_component(
                 ])
 
                 # Post-process the response for better presentation
-                formatted_content = format_presentation_content(response.strip(), content_type, subtopic)
+                formatted_content = response.strip()
 
                 return {
                     "type": "text",
@@ -2370,7 +2532,7 @@ def generate_content_for_subtopic_component(
                     partial_variables={"format_instructions": parser.get_format_instructions()}
                 )
 
-                prompt = template.format(topic=topic)
+                prompt = template.format(topic=subtopic)
                 
                 # Log the prompt
                 # langfuse.create_prompt(
