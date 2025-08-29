@@ -447,7 +447,7 @@ def render_topic_subtopic_input_step():
             st.rerun()
 
 
-agent = AssistantAgent(
+agentt = AssistantAgent(
     name="PPTTextGenerator",
     system_message="""
 You are an elite PowerPoint Content Creator specializing in professional, presentation-ready slide content. 
@@ -979,7 +979,7 @@ def generate_content_structure_for_subtopics():
             )
             
             suggested_types = [ct.strip() for ct in response.text.split(",")]
-            # valid_types = [ct for ct in suggested_types if ct in content_types_dict]
+          
             if response and hasattr(response, 'text') and response.text:
                 suggested_types = [ct.strip() for ct in response.text.split(",")]
                 valid_types = [ct for ct in suggested_types if ct in content_types_dict]
@@ -2473,15 +2473,6 @@ def generate_content_for_subtopic_component(
     # TEXT component
     if component.lower() == "text":
         try:
-            #     variability_instructions = [
-            #     "Provide a fresh perspective on this topic.",
-            #     "Use different examples than typical explanations.",
-            #     "Focus on practical applications and real-world scenarios.",
-            #     "Include recent developments or current trends.",
-            #     "Present the information from a unique angle."
-            # ]
-            
-            #     selected_instruction = random.choice(variability_instructions)
                 prompt_obj = langfuse_client.get_prompt(
                     name="text_general_generation_prompt",
                     label="production"
@@ -2491,12 +2482,8 @@ def generate_content_for_subtopic_component(
                     content_type=content_type,
                     topic=subtopic
                 )
-            #     enhanced_prompt = prompt_obj.compile(
-            #     research_context=research_context,
-            #     content_type=content_type,
-            #     topic=subtopic
-            # ) + f"\n\nAdditional instruction: {selected_instruction}"
-                response = agent.generate_reply(
+
+                response = agentt.generate_reply(
                 [{"role": "user", "content": prompt}],
                 # Add these parameters if supported by your agent
                 temperature=0.8,  # Increase randomness
@@ -3285,6 +3272,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
