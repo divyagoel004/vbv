@@ -1272,7 +1272,7 @@ from base64 import b64decode
 from PIL import Image, UnidentifiedImageError
 from langchain.prompts import PromptTemplate
 import streamlit as st
-def generate_mermaid_diagram(payload: dict, vm_ip: str = "40.81.228.142:5500") -> str:
+def generate_mermaid_diagram(payload: dict, vm_ip: str = "http://127.0.0.1:5500") -> str:
     url = f"http://{vm_ip}/render-mermaid/"
     
     try:
@@ -3272,3 +3272,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
