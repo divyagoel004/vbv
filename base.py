@@ -516,8 +516,13 @@ def query_vector_db(user_query, top_k=10, chunk_limit=500, rerank_k=30):
     # Optional LLM reranking (if you have OpenAI key and want to use it)
     if len(candidates) > top_k and os.getenv("OPENAI_API_KEY"):
         try:
-            from openai import OpenAI
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            from groq import Groq
+
+            client = Groq(
+                api_key=os.environ.get("GROQ_API_KEY"),
+            )
+
+
 
             docs_text = "\n\n".join([f"[{i}] {doc}" for i, doc in enumerate(candidates)])
             prompt = f"""
@@ -531,7 +536,15 @@ def query_vector_db(user_query, top_k=10, chunk_limit=500, rerank_k=30):
             Return only the indices of the top {top_k} most relevant documents, separated by commas.
             Example: 0,3,1,5
             """
-
+            resp = client.chat.completions.create(
+               messages=[
+                   {
+                       "role": "user",
+                       "content": prompt,
+                   }
+               ],
+               model="llama-3.3-70b-versatile",
+           )
             resp = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
@@ -614,4 +627,5 @@ def rebuild_vector_db_with_filtered_sources(excluded_indices):
     
     if text_blocks:
         store_in_vector_db(text_blocks, metadata_blocks)
+
         print(f"[Vector Store] Rebuilt with {len(text_blocks)} chunks from {len(filtered_sources)} sources")
