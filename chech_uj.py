@@ -2473,16 +2473,31 @@ def generate_content_for_subtopic_component(
     # TEXT component
     if component.lower() == "text":
         try:
-                prompt_obj = langfuse_client.get_prompt(
-                    name="text_general_generation_prompt",
-                    label="production"
-                )
-                prompt = prompt_obj.compile(
-                    research_context=research_context,
-                    content_type=content_type,
-                    topic=subtopic
-                )
+                # prompt_obj = langfuse_client.get_prompt(
+                #     name="text_general_generation_prompt",
+                #     label="production"
+                # )
+                # prompt = prompt_obj.compile(
+                #     research_context=research_context,
+                #     content_type=content_type,
+                #     topic=subtopic
+                # )
+                prompt = f"""
+                        Use this research context only as a reference:
 
+                            {research_context}
+
+                            Create clean, slide-ready content.
+
+                            Instructions:
+                            - Start with a short **Definition** of **{topic}** (max 2 lines, aim for 1–1.5)
+                            - Add 2-3 crisp **Key Points** (each ≤ 1.5 lines, ideally 1)
+                            - List 2-3 precise **Real-World Applications** (≤ 1.5 lines each)
+                            - Use external knowledge, not just input
+                            - Avoid fluff, rewording, or long phrases
+                            - Tone: clear, minimal, and professional ({depth_level} audience)
+                            - Format: {component} → {content_type}
+                        """
                 response = agentt.generate_reply(
                 [{"role": "user", "content": prompt}],
                 # Add these parameters if supported by your agent
@@ -3272,4 +3287,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
