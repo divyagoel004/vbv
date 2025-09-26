@@ -1245,12 +1245,17 @@ def generate_subtopic_based_slides(topic, subtopics, subtopic_component_structur
             
             # Generate content sections (integrate with your existing content generation)
             content_sections = []
-            
+           
             for component in components:
                 # Here you would call your existing content generation functions
                 # but with subtopic context
+                query = f"{topic} {subtopic} {content_type} {component}"
+                research_context_results = query_vector_db(query, top_k=5, chunk_limit=300)
+    
+    # Combine research context
+                research_context = "\n\n".join(research_context_results) if research_context_results else ""
                 section = generate_content_for_subtopic_component(
-                    component, content_type, subtopic, topic, depth_level,content_generator
+                    component, content_type, subtopic, topic, depth_level,content_generator,research_context
                 )
                 content_sections.append(section)
             
@@ -1272,7 +1277,7 @@ from base64 import b64decode
 from PIL import Image, UnidentifiedImageError
 from langchain.prompts import PromptTemplate
 import streamlit as st
-def generate_mermaid_diagram(payload: dict, vm_ip: str = "http://127.0.0.1:5500") -> str:
+def generate_mermaid_diagram(payload: dict, vm_ip: str = "40.81.228.142:5500") -> str:
     url = f"http://{vm_ip}/render-mermaid/"
     
     try:
@@ -1385,30 +1390,30 @@ def create_fallback_equation_image(math_expr: str, output_path: str) -> str:
         print(f"ERROR: Even fallback image creation failed: {str(e)}")
         return ""
     
-def generate_content_for_subtopic_component_enhanced(
-    component: str,
-    content_type: str,
-    subtopic: str,
-    main_topic: str,
-    depth_level: str,
-    content_generator,
-    trace_id=None
-):
-    """
-    Generate content using the vector database for research context
-    """
+# def generate_content_for_subtopic_component_enhanced(
+#     component: str,
+#     content_type: str,
+#     subtopic: str,
+#     main_topic: str,
+#     depth_level: str,
+#     content_generator,
+#     trace_id=None
+# ):
+#     """
+#     Generate content using the vector database for research context
+#     """
     
-    # Query vector database for relevant context
-    query = f"{main_topic} {subtopic} {content_type} {component}"
-    research_context_results = query_vector_db(query, top_k=5, chunk_limit=300)
+#     # Query vector database for relevant context
+#     query = f"{main_topic} {subtopic} {content_type} {component}"
+#     research_context_results = query_vector_db(query, top_k=5, chunk_limit=300)
     
-    # Combine research context
-    research_context = "\n\n".join(research_context_results) if research_context_results else ""
+#     # Combine research context
+#     research_context = "\n\n".join(research_context_results) if research_context_results else ""
     
-    # Use the existing content generation logic but with enhanced context
-    return generate_content_for_subtopic_component(
-        component, content_type, subtopic, main_topic, depth_level, content_generator, trace_id
-    )
+#     # Use the existing content generation logic but with enhanced context
+#     return generate_content_for_subtopic_component(
+#         component, content_type, subtopic, main_topic, depth_level, content_generator, research_context,trace_id
+#     )
 
 def get_top_image_contexts(topic, content_type, component, top_k=10):
     """
@@ -2409,7 +2414,9 @@ def generate_content_for_subtopic_component(
     subtopic: str,
     main_topic: str,
     depth_level: str,
+    
     content_generator,
+    research_context : str,
     trace_id=None
 ):
     """
@@ -2448,13 +2455,13 @@ def generate_content_for_subtopic_component(
             print(f"DEBUG: Image download/save failed: {e}")
         return None
 
-    # Shared research context block
-    research_context = f"""
-    Main Topic: {main_topic}
-    Subtopic:   {subtopic}
-    Content Type: {content_type}
-    Audience Level: {depth_level}
-    """
+    # # Shared research context block
+    # research_context = f"""
+    # Main Topic: {main_topic}
+    # Subtopic:   {subtopic}
+    # Content Type: {content_type}
+    # Audience Level: {depth_level}
+    # """
 
     # Initialize Langfuse trace
     import time
@@ -2473,31 +2480,16 @@ def generate_content_for_subtopic_component(
     # TEXT component
     if component.lower() == "text":
         try:
-                # prompt_obj = langfuse_client.get_prompt(
-                #     name="text_general_generation_prompt",
-                #     label="production"
-                # )
-                # prompt = prompt_obj.compile(
-                #     research_context=research_context,
-                #     content_type=content_type,
-                #     topic=subtopic
-                # )
-                prompt = f"""
-                        Use this research context only as a reference:
-
-                            {research_context}
-
-                            Create clean, slide-ready content.
-
-                            Instructions:
-                            - Start with a short **Definition** of **{topic}** (max 2 lines, aim for 1–1.5)
-                            - Add 2-3 crisp **Key Points** (each ≤ 1.5 lines, ideally 1)
-                            - List 2-3 precise **Real-World Applications** (≤ 1.5 lines each)
-                            - Use external knowledge, not just input
-                            - Avoid fluff, rewording, or long phrases
-                            - Tone: clear, minimal, and professional ({depth_level} audience)
-                            - Format: {component} → {content_type}
-                        """
+                prompt_obj = langfuse_client.get_prompt(
+                    name="text_general_generation_prompt",
+                    label="production"
+                )
+                prompt = prompt_obj.compile(
+                    research_context=research_context,
+                    content_type=content_type,
+                    topic=subtopic
+                )
+                print(f"DEBUG: Generated prompt: {prompt}")
                 response = agentt.generate_reply(
                 [{"role": "user", "content": prompt}],
                 # Add these parameters if supported by your agent
@@ -3193,7 +3185,7 @@ def export_to_pdf(topic):
         story.append(Spacer(1, 200))  # Push title to middle
         story.append(Paragraph(topic, cover_title_style))
         story.append(Spacer(1, 20))
-        story.append(Paragraph("Generated Slide Deck", title_style))
+        story.append(Paragraph("", title_style))
         story.append(PageBreak())
 
         # ---------- slides ----------
@@ -3287,5 +3279,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
