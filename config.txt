@@ -1,12 +1,13 @@
 [
   {
     "model": "llama-3.3-70b-versatile",
-    "api_key": "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",
+    "api_key": "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",
     "base_url": "https://api.groq.com/openai/v1"
   },
   {
     "model": "llama-3.3-70b-versatile",
-    "api_key": "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",
+    "api_key": "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",
     "base_url": "https://api.groq.com/openai/v1"
   }
 ]
+
