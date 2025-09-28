@@ -545,11 +545,7 @@ def query_vector_db(user_query, top_k=10, chunk_limit=500, rerank_k=30):
                ],
                model="llama-3.3-70b-versatile",
            )
-            resp = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0
-            )
+
             ranked_text = resp.choices[0].message.content.strip()
 
             # Extract indices
@@ -629,3 +625,4 @@ def rebuild_vector_db_with_filtered_sources(excluded_indices):
         store_in_vector_db(text_blocks, metadata_blocks)
 
         print(f"[Vector Store] Rebuilt with {len(text_blocks)} chunks from {len(filtered_sources)} sources")
+
